@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Meine Webseite</title>
+</head>
+<body>
+
+<h1>Willkommen</h1>
+
+<script type="module">
+
+import { createClient }
+from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+
+const supabase = createClient(
+  'https://ayvpkwjuixwpimosphfz.supabase.co',
+  'sb_publishable_7H6R9UJlYkT_R3RvGe2m-A_RnQhS0vr'
+)
+
+async function logVisitor() {
+
+  // IP holen
+  const response = await fetch(
+    "https://api.ipify.org?format=json"
+  )
+
+  const data = await response.json()
+
+  // In Datenbank speichern
+  await supabase
+    .from('logs')
+    .insert([
+      {
+        ip: data.ip,
+        useragent: navigator.userAgent
+      }
+    ])
+
+  console.log("Besucher gespeichert")
+}
+
+logVisitor()
+
+</script>
+
+</body>
+</html>
