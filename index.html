@@ -4,112 +4,70 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Besucherlog</title>
-
-  <!-- Supabase JS (CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: monospace; background: #0a0a0f; color: #e2e8f0; display: flex; justify-content: center; padding: 3rem 1rem; }
+    .box { background: #13131a; border: 1px solid #1e1e2e; border-radius: 12px; padding: 2rem; max-width: 500px; width: 100%; }
+    h1 { color: #00e5ff; margin-bottom: 1.5rem; font-size: 1.4rem; }
+    .row { margin-bottom: 1rem; }
+    .row label { display: block; font-size: 0.65rem; letter-spacing: 0.15em; color: #64748b; text-transform: uppercase; margin-bottom: 0.3rem; }
+    .row span { color: #00e5ff; font-size: 0.85rem; word-break: break-all; }
+    #status { margin-top: 1.5rem; padding: 0.7rem 1rem; border-radius: 8px; font-size: 0.8rem; background: rgba(0,229,255,0.08); border: 1px solid rgba(0,229,255,0.2); color: #00e5ff; }
+    #status.error { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.3); color: #ef4444; }
+    #status.success { background: rgba(16,185,129,0.1); border-color: rgba(16,185,129,0.3); color: #10b981; }
+  </style>
 </head>
 <body>
+<div class="box">
+  <h1>// Besucherlog</h1>
+  <div class="row"><label>IP-Adresse</label><span id="ip">wird geladen…</span></div>
+  <div class="row"><label>Zeitstempel</label><span id="ts">wird geladen…</span></div>
+  <div class="row"><label>Seite</label><span id="seite">wird geladen…</span></div>
+  <div id="status">Verbinde mit Supabase…</div>
+</div>
+
 <script>
-  // ============================================================
-  //  KONFIGURATION – hier deine Supabase-Daten eintragen
-  // ============================================================
-  const SUPABASE_URL      = 'https://ayvpkwjuixwpimosphfz.supabase.co';
+  // ─── HIER EINTRAGEN ───────────────────────────────────────
+  const SUPABASE_URL      = 'https://DEIN-PROJEKT.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_AqJyDOcplRYhW0Mz6bzNjA_Avw82hZh';
-  // ============================================================
-
-  const TABELLE = 'besucher_log';
-
-  // Konfigurationshinweis
-  if (SUPABASE_URL.includes('DEIN-PROJEKT') || SUPABASE_ANON_KEY.includes('DEIN-ANON')) {
-    document.getElementById('configHint').style.display = 'block';
-  }
+  // ──────────────────────────────────────────────────────────
 
   const { createClient } = supabase;
-  const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  // UI-Elemente
-  const ipEl     = document.getElementById('ipVal');
-  const tsEl     = document.getElementById('tsVal');
-  const pageEl   = document.getElementById('pageVal');
-  const uaEl     = document.getElementById('uaVal');
-  const statusEl = document.getElementById('statusText');
-  const spinner  = document.getElementById('spinner');
-  const feedback = document.getElementById('feedback');
-
-  function showFeedback(type, msg) {
-    feedback.className = 'feedback ' + type;
-    feedback.innerHTML = (type === 'success' ? '✓ ' : '✗ ') + msg;
-    spinner.style.display = 'none';
-  }
-
-  async function getIP() {
+  async function run() {
+    let ip = 'unbekannt';
     try {
       const r = await fetch('https://api.ipify.org?format=json');
-      const d = await r.json();
-      return d.ip;
-    } catch {
-      return 'unbekannt';
-    }
-  }
+      ip = (await r.json()).ip;
+    } catch {}
 
-  async function init() {
-    const ip        = await getIP();
     const jetzt     = new Date();
     const userAgent = navigator.userAgent;
     const seite     = window.location.href;
 
-    // UI befüllen
-    ipEl.textContent   = ip;
-    tsEl.textContent   = jetzt.toLocaleString('de-DE');
-    uaEl.textContent   = userAgent.substring(0, 80) + (userAgent.length > 80 ? '…' : '');
-    pageEl.textContent = seite;
+    document.getElementById('ip').textContent    = ip;
+    document.getElementById('ts').textContent    = jetzt.toLocaleString('de-DE');
+    document.getElementById('seite').textContent = seite;
 
-    statusEl.textContent = 'Speichere…';
-
-    // In Supabase speichern
-    const { error } = await client.from(TABELLE).insert({
+    const { error } = await db.from('besucher_log').insert({
       ip,
       user_agent: userAgent,
       seite,
-      erstellt_am: jetzt.toISOString(),
+      erstellt_am: jetzt.toISOString()
     });
 
+    const statusEl = document.getElementById('status');
     if (error) {
-      statusEl.textContent = 'Fehler';
-      showFeedback('error', error.message);
-      return;
+      statusEl.className = 'error';
+      statusEl.textContent = '✗ Fehler: ' + error.message;
+    } else {
+      statusEl.className = 'success';
+      statusEl.textContent = '✓ Eintrag gespeichert!';
     }
-
-    statusEl.textContent = 'Gespeichert';
-    showFeedback('success', 'Eintrag erfolgreich gespeichert.');
-
-    // Letzte Einträge laden (klappt nur wenn auth oder Policy angepasst)
-    loadLog();
   }
 
-  async function loadLog() {
-    const { data, error } = await client
-      .from(TABELLE)
-      .select('erstellt_am, ip, seite')
-      .order('erstellt_am', { ascending: false })
-      .limit(10);
-
-    if (error || !data || data.length === 0) return;
-
-    const card = document.getElementById('logCard');
-    const body = document.getElementById('logBody');
-    card.style.display = 'block';
-
-    body.innerHTML = data.map(row => `
-      <tr>
-        <td>${new Date(row.erstellt_am).toLocaleString('de-DE')}</td>
-        <td><span class="ip-badge">${row.ip}</span></td>
-        <td>${new URL(row.seite).pathname || '/'}</td>
-      </tr>
-    `).join('');
-  }
-
-  init();
+  run();
 </script>
 </body>
 </html>
