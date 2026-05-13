@@ -1,48 +1,465 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <title>Meine Webseite</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Besucherlog</title>
+
+  <!-- Supabase JS (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@400;800&display=swap');
+
+    :root {
+      --bg:       #0a0a0f;
+      --surface:  #13131a;
+      --border:   #1e1e2e;
+      --accent:   #00e5ff;
+      --accent2:  #7c3aed;
+      --text:     #e2e8f0;
+      --muted:    #64748b;
+      --success:  #10b981;
+      --error:    #ef4444;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      overflow-x: hidden;
+    }
+
+    /* Grid-Hintergrund */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    .container {
+      position: relative;
+      width: 100%;
+      max-width: 680px;
+      z-index: 1;
+    }
+
+    /* Glowing blob */
+    .blob {
+      position: fixed;
+      width: 500px;
+      height: 500px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0,229,255,0.06) 0%, transparent 70%);
+      top: -150px;
+      right: -150px;
+      pointer-events: none;
+      animation: float 8s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(30px); }
+    }
+
+    /* Header */
+    .header {
+      margin-bottom: 2.5rem;
+    }
+
+    .label {
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: clamp(1.8rem, 5vw, 2.8rem);
+      line-height: 1.1;
+      color: #fff;
+    }
+
+    h1 span {
+      color: var(--accent);
+    }
+
+    .subtitle {
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    /* Status-Card */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      opacity: 0.5;
+    }
+
+    .card-title {
+      font-size: 0.65rem;
+      letter-spacing: 0.15em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+
+    /* Daten-Grid */
+    .data-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .data-item label {
+      display: block;
+      font-size: 0.6rem;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 0.3rem;
+    }
+
+    .data-item .value {
+      font-size: 0.9rem;
+      color: var(--accent);
+      word-break: break-all;
+    }
+
+    .data-item.full { grid-column: 1 / -1; }
+
+    /* Status-Badge */
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.75rem;
+      padding: 0.3rem 0.7rem;
+      border-radius: 100px;
+      background: rgba(0,229,255,0.08);
+      border: 1px solid rgba(0,229,255,0.2);
+      color: var(--accent);
+      margin-bottom: 1rem;
+    }
+
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+
+    /* Feedback */
+    .feedback {
+      padding: 0.8rem 1rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      display: none;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .feedback.success {
+      display: flex;
+      background: rgba(16,185,129,0.1);
+      border: 1px solid rgba(16,185,129,0.3);
+      color: var(--success);
+    }
+
+    .feedback.error {
+      display: flex;
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3);
+      color: var(--error);
+    }
+
+    /* Spinner */
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(0,229,255,0.2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Log-Tabelle */
+    .log-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.72rem;
+      margin-top: 0.5rem;
+    }
+
+    .log-table th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 0.6rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 0.4rem 0.6rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .log-table td {
+      padding: 0.5rem 0.6rem;
+      border-bottom: 1px solid rgba(30,30,46,0.6);
+      color: var(--text);
+      font-size: 0.7rem;
+    }
+
+    .log-table tr:last-child td { border-bottom: none; }
+
+    .log-table tr:hover td {
+      background: rgba(0,229,255,0.03);
+    }
+
+    .ip-badge {
+      background: rgba(124,58,237,0.15);
+      border: 1px solid rgba(124,58,237,0.3);
+      color: #a78bfa;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.65rem;
+    }
+
+    .footer {
+      margin-top: 2rem;
+      font-size: 0.65rem;
+      color: var(--muted);
+      text-align: center;
+      letter-spacing: 0.05em;
+    }
+
+    /* Konfigurationshinweis */
+    .config-hint {
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.25);
+      border-radius: 8px;
+      padding: 1rem;
+      font-size: 0.75rem;
+      color: #fca5a5;
+      margin-bottom: 1rem;
+      display: none;
+    }
+
+    .config-hint code {
+      background: rgba(239,68,68,0.15);
+      padding: 0.1rem 0.3rem;
+      border-radius: 3px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+  </style>
 </head>
 <body>
 
-<h1>Willkommen</h1>
+<div class="blob"></div>
 
-<script type="module">
+<div class="container">
 
-import { createClient }
-from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+  <!-- Config-Hinweis (wird ausgeblendet, wenn korrekt konfiguriert) -->
+  <div class="config-hint" id="configHint">
+    ⚠️ Bitte <code>SUPABASE_URL</code> und <code>SUPABASE_ANON_KEY</code> im Script-Block eintragen.
+  </div>
 
-const supabase = createClient(
-  'https://ayvpkwjuixwpimosphfz.supabase.co',
-  'sb_publishable_7H6R9UJlYkT_R3RvGe2m-A_RnQhS0vr'
-)
+  <div class="header">
+    <div class="label">// system.log</div>
+    <h1>Besucher<span>Log</span></h1>
+    <div class="subtitle">Zeitstempel · IP-Erfassung · Supabase</div>
+  </div>
 
-async function logVisitor() {
+  <!-- Aktueller Besuch -->
+  <div class="card">
+    <div class="card-title">// aktueller besuch</div>
+    <div class="status">
+      <span class="dot"></span>
+      <span id="statusText">Wird erfasst…</span>
+      <span class="spinner" id="spinner"></span>
+    </div>
 
-  // IP holen
-  const response = await fetch(
-    "https://api.ipify.org?format=json"
-  )
+    <div class="data-grid">
+      <div class="data-item">
+        <label>IP-Adresse</label>
+        <div class="value" id="ipVal">—</div>
+      </div>
+      <div class="data-item">
+        <label>Zeitstempel</label>
+        <div class="value" id="tsVal">—</div>
+      </div>
+      <div class="data-item full">
+        <label>Seite</label>
+        <div class="value" id="pageVal">—</div>
+      </div>
+      <div class="data-item full">
+        <label>User-Agent</label>
+        <div class="value" id="uaVal">—</div>
+      </div>
+    </div>
 
-  const data = await response.json()
+    <div class="feedback" id="feedback"></div>
+  </div>
 
-  // In Datenbank speichern
-  await supabase
-    .from('logs')
-    .insert([
-      {
-        ip: data.ip,
-        useragent: navigator.userAgent
-      }
-    ])
+  <!-- Letzte Einträge (nur wenn eingeloggt) -->
+  <div class="card" id="logCard" style="display:none;">
+    <div class="card-title">// letzte einträge</div>
+    <table class="log-table">
+      <thead>
+        <tr>
+          <th>Zeitstempel</th>
+          <th>IP</th>
+          <th>Seite</th>
+        </tr>
+      </thead>
+      <tbody id="logBody">
+      </tbody>
+    </table>
+  </div>
 
-  console.log("Besucher gespeichert")
-}
+  <div class="footer">Powered by Supabase · GitHub Pages</div>
+</div>
 
-logVisitor()
+<script>
+  // ============================================================
+  //  KONFIGURATION – hier deine Supabase-Daten eintragen
+  // ============================================================
+  const SUPABASE_URL      = 'https://DEIN-PROJEKT.supabase.co';
+  const SUPABASE_ANON_KEY = 'DEIN-ANON-KEY';
+  // ============================================================
 
+  const TABELLE = 'besucher_log';
+
+  // Konfigurationshinweis
+  if (SUPABASE_URL.includes('DEIN-PROJEKT') || SUPABASE_ANON_KEY.includes('DEIN-ANON')) {
+    document.getElementById('configHint').style.display = 'block';
+  }
+
+  const { createClient } = supabase;
+  const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // UI-Elemente
+  const ipEl     = document.getElementById('ipVal');
+  const tsEl     = document.getElementById('tsVal');
+  const pageEl   = document.getElementById('pageVal');
+  const uaEl     = document.getElementById('uaVal');
+  const statusEl = document.getElementById('statusText');
+  const spinner  = document.getElementById('spinner');
+  const feedback = document.getElementById('feedback');
+
+  function showFeedback(type, msg) {
+    feedback.className = 'feedback ' + type;
+    feedback.innerHTML = (type === 'success' ? '✓ ' : '✗ ') + msg;
+    spinner.style.display = 'none';
+  }
+
+  async function getIP() {
+    try {
+      const r = await fetch('https://api.ipify.org?format=json');
+      const d = await r.json();
+      return d.ip;
+    } catch {
+      return 'unbekannt';
+    }
+  }
+
+  async function init() {
+    const ip        = await getIP();
+    const jetzt     = new Date();
+    const userAgent = navigator.userAgent;
+    const seite     = window.location.href;
+
+    // UI befüllen
+    ipEl.textContent   = ip;
+    tsEl.textContent   = jetzt.toLocaleString('de-DE');
+    uaEl.textContent   = userAgent.substring(0, 80) + (userAgent.length > 80 ? '…' : '');
+    pageEl.textContent = seite;
+
+    statusEl.textContent = 'Speichere…';
+
+    // In Supabase speichern
+    const { error } = await client.from(TABELLE).insert({
+      ip,
+      user_agent: userAgent,
+      seite,
+      erstellt_am: jetzt.toISOString(),
+    });
+
+    if (error) {
+      statusEl.textContent = 'Fehler';
+      showFeedback('error', error.message);
+      return;
+    }
+
+    statusEl.textContent = 'Gespeichert';
+    showFeedback('success', 'Eintrag erfolgreich gespeichert.');
+
+    // Letzte Einträge laden (klappt nur wenn auth oder Policy angepasst)
+    loadLog();
+  }
+
+  async function loadLog() {
+    const { data, error } = await client
+      .from(TABELLE)
+      .select('erstellt_am, ip, seite')
+      .order('erstellt_am', { ascending: false })
+      .limit(10);
+
+    if (error || !data || data.length === 0) return;
+
+    const card = document.getElementById('logCard');
+    const body = document.getElementById('logBody');
+    card.style.display = 'block';
+
+    body.innerHTML = data.map(row => `
+      <tr>
+        <td>${new Date(row.erstellt_am).toLocaleString('de-DE')}</td>
+        <td><span class="ip-badge">${row.ip}</span></td>
+        <td>${new URL(row.seite).pathname || '/'}</td>
+      </tr>
+    `).join('');
+  }
+
+  init();
 </script>
-
 </body>
 </html>
